@@ -3,70 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Карта ТК ССР Павлодар</title>
+    <title>Карта ТК</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        #map { height: 100vh; width: 100%; z-index: 1; }
+        /* СБРОС СТИЛЕЙ ДЛЯ СТАБИЛЬНОСТИ */
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; font-family: -apple-system, sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 1; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
         
-        /* КРАСИВЫЙ ПОИСК */
+        /* СОВРЕМЕННЫЙ ПОИСК СВЕРХУ */
         .search-box {
             position: absolute; top: 15px; left: 15px; right: 15px;
             z-index: 1000; background: white; padding: 6px;
-            border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            max-width: 380px;
+            border-radius: 14px; box-shadow: 0 4px 25px rgba(0,0,0,0.15);
+            max-width: 400px; /* Для компьютера */
         }
         input {
             width: 100%; padding: 12px 15px; border: 1px solid #e0e0e0;
             border-radius: 10px; font-size: 16px; outline: none; box-sizing: border-box;
-            background: #f9f9f9; transition: 0.3s;
+            background: #fcfcfc; transition: 0.2s; -webkit-appearance: none; /* iOS */
         }
-        input:focus { border-color: #007bff; background: #fff; box-shadow: 0 0 0 3px rgba(0,123,255,0.1); }
+        input:focus { border-color: #007bff; background: #fff; box-shadow: 0 0 0 3px rgba(0,123,255,0.05); }
         
+        /* РЕЗУЛЬТАТЫ ПОИСКА */
         #results {
             background: white; max-height: 250px; overflow-y: auto;
-            border-radius: 10px; display: none; margin-top: 8px;
+            border-radius: 10px; display: none; margin-top: 8px; border: 1px solid #eee;
         }
-        .item { padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 15px; color: #333; }
+        .item { padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f2f2f2; font-size: 15px; color: #333; }
         .item:last-child { border-bottom: none; }
         .item:active { background: #f0f7ff; }
 
-        /* ЭСТЕТИЧНЫЙ ПЕРЕКЛЮЧАТЕЛЬ СЛОЕВ */
+        /* ЭСТЕТИЧНЫЙ ПЕРЕКЛЮЧАТЕЛЬ СЛОЕВ - ПЕРЕНЕСЕН ВНИЗ ВЛЕВО */
         .leaflet-control-layers {
+            margin-bottom: 25px !important; margin-left: 15px !important; /* Удобный отступ от угла */
             border: none !important;
             box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
             border-radius: 12px !important;
-            padding: 5px !important;
+            padding: 4px !important;
         }
-        /* Увеличиваем иконку для мобилок */
+        /* Увеличиваем иконку слоев для удобного нажатия пальцем */
         .leaflet-control-layers-toggle {
-            width: 44px !important;
-            height: 44px !important;
+            width: 44px !important; height: 44px !important;
             background-size: 26px 26px !important;
         }
+        /* Стиль развернутого меню */
         .leaflet-control-layers-expanded {
-            padding: 10px 15px !important;
-            color: #333;
-            font-size: 14px;
-            line-height: 1.8;
+            padding: 10px 15px !important; color: #333; font-size: 14px; line-height: 1.8;
+            border-radius: 10px;
         }
-        /* Красивые радиокнопки */
-        .leaflet-control-layers-selector { margin-right: 8px; margin-top: 2px; }
+        .leaflet-control-layers-selector { margin-right: 8px; margin-top: 3px; }
 
-        /* Кнопка "Где я" - если захочешь добавить позже */
-        .gps-button {
-            position: absolute; bottom: 25px; right: 15px; z-index: 1000;
-            background: white; width: 50px; height: 50px; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer;
-        }
+        /* УБИРАЕМ КНОПКИ +- (чтобы не мешали), ИСПРАВЛЯЕМ ПОПАПЫ */
+        .leaflet-control-zoom { display: none !important; } /* Скрываем +- */
+        .leaflet-popup-content-wrapper { border-radius: 10px; padding: 5px; }
+        .leaflet-popup-content b { color: #007bff; }
+    
     </style>
 </head>
 <body>
 
 <div class="search-box">
-    <input type="text" id="search" placeholder="Поиск ТК (напр. 97)..." autocomplete="off">
+    <input type="text" id="search" placeholder="Поиск (номер ТК)..." autocomplete="off" autocorrect="off">
     <div id="results"></div>
 </div>
 
@@ -76,49 +74,53 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
 <script>
-    // Настройка слоев
+    // 1. Настройка слоев
     const dgis = L.tileLayer('https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', {
         subdomains: '0123', attribution: '© 2GIS'
     });
     const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-        subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google'
+        subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google Satellite'
     });
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
 
+    // 2. Инициализация карты (без лишних контролов)
     const map = L.map('map', {
         center: [52.287, 76.967],
         zoom: 14,
-        layers: [dgis],
-        zoomControl: false // Скрываем стандартные кнопки +-, чтобы не мешали
+        layers: [dgis], // 2ГИС по умолчанию
+        zoomControl: false, // Отключаем кнопки +- (они не нужны при тач-зуме)
+        attributionControl: false // Скрываем лишний текст в углу
     });
 
-    // Добавляем кнопки зума в удобное место (снизу справа)
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-    // МЕНЮ СЛОЕВ (с настройкой отображения)
+    // 3. МЕНЮ СЛОЕВ - ПЕРЕНЕСЕНО ВНИЗ ВЛЕВО И ВСЕГДА СВЕРНУТО (ICON VIEW)
     const baseMaps = {
         "<span style='font-weight:bold;'>🗺️ 2ГИС Карта</span>": dgis,
-        "<span style='font-weight:bold;'>🛰️ Спутник Google</span>": googleSat,
+        "<span style='font-weight:bold;'>🛰️ Спутник</span>": googleSat,
         "<span style='font-weight:bold;'>🏁 Схема OSM</span>": osm
     };
     
-    // collapsed: true делает его иконкой на мобильных (так эстетичнее)
-    L.control.layers(baseMaps, null, { collapsed: true, position: 'topright' }).addTo(map);
+    // collapsed: true гарантирует, что это будет иконка, а не список
+    L.control.layers(baseMaps, null, { collapsed: true, position: 'bottomleft' }).addTo(map);
 
+    // 4. Ваша ссылка на Google CSV (ВАЖНО: ПОДСТАВЬТЕ СВОЮ!)
     const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
+
     let markersData = [];
 
+    // Функция очистки для поиска
     function clean(text) {
         if (!text) return "";
         return text.toString().toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, '');
     }
 
+    // Загрузка данных
     function loadData() {
         Papa.parse(tableUrl, {
             download: true,
             header: true,
             skipEmptyLines: true,
             complete: function(results) {
+                console.log("Данные загружены:", results.data);
                 results.data.forEach(row => {
                     const name = row.name || row.Name || "";
                     const lat = parseFloat(row.lat || row.Lat);
@@ -127,7 +129,7 @@
 
                     if (!isNaN(lat) && !isNaN(lng)) {
                         const m = L.marker([lat, lng]).addTo(map);
-                        m.bindPopup(`<div style="font-size:14px;"><b>ТК: ${name}</b><br>${desc}</div>`);
+                        m.bindPopup(`<div style="font-size:14px; width:200px;"><b>ТК: ${name}</b><br>${desc}</div>`);
                         
                         markersData.push({ cleanName: clean(name), realName: name, marker: m });
                     }
@@ -136,6 +138,7 @@
         });
     }
 
+    // Логика поиска
     const input = document.getElementById('search');
     const resDiv = document.getElementById('results');
 
@@ -149,7 +152,7 @@
             found.forEach(x => {
                 const d = document.createElement('div');
                 d.className = 'item';
-                d.innerHTML = `📍 <b>${x.realName}</b>`;
+                d.innerHTML = `📍 ТК: <b>${x.realName}</b>`;
                 d.onclick = () => {
                     map.setView(x.marker.getLatLng(), 18);
                     x.marker.openPopup();
