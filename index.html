@@ -359,11 +359,12 @@
 
                 if (isNaN(lat) || isNaN(lng)) return;
 
-                const marker = L.marker([lat, lng]).addTo(map);
-                marker.bindPopup(
-                    `<div class="popup-title">ТК: ${name}</div>` +
-                    (desc ? `<div class="popup-desc">${desc}</div>` : '')
-                );
+                const photo = (row.photo || row.Photo || '').trim();
+marker.bindPopup(
+    `<div class="popup-title">ТК: ${name}</div>` +
+    (desc ? `<div class="popup-desc">${desc}</div>` : '') +
+    (photo ? `<br><img src="${photo}" style="width:220px;border-radius:8px;margin-top:6px;">` : '')
+);
 
                 markersData.push({
                     key: normalize(name),
