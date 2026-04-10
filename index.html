@@ -22,10 +22,11 @@
             border-radius: 8px; font-size: 16px; outline: none; box-sizing: border-box;
         }
         #results {
-            background: white; max-height: 200px; overflow-y: auto;
+            background: white; max-height: 250px; overflow-y: auto;
             border-radius: 8px; display: none; margin-top: 5px; border: 1px solid #eee;
         }
-        .item { padding: 12px; border-bottom: 1px solid #f2f2f2; font-size: 16px; color: #333; }
+        .item { padding: 12px; border-bottom: 1px solid #f2f2f2; font-size: 16px; color: #333; cursor: pointer; }
+        .item:active { background: #f0f7ff; }
 
         /* КНОПКА СЛОЕВ */
         .leaflet-bottom.leaflet-right { bottom: 30px !important; right: 15px !important; }
@@ -37,26 +38,25 @@
         }
         .leaflet-control-layers-toggle::after { content: "🗺️"; font-size: 28px; }
 
-        /* АНИМАЦИЯ ТОЧКИ "Я ЗДЕСЬ" (КАК В 2ГИС) */
+        /* АНИМАЦИЯ ТОЧКИ "Я ЗДЕСЬ" */
         .user-location-marker {
+            width: 16px; height: 16px;
             background: #007bff;
             border: 3px solid white;
             border-radius: 50%;
-            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            position: relative;
         }
         .pulse {
-            width: 15px;
-            height: 15px;
-            background: rgba(0, 123, 255, 0.4);
+            width: 16px; height: 16px;
+            background: rgba(0, 123, 255, 0.6);
             border-radius: 50%;
             position: absolute;
-            top: -3px; /* Центрирование относительно основного маркера */
-            left: -3px;
+            top: 0; left: 0;
             animation: pulse-animation 2s infinite;
-            z-index: -1;
         }
         @keyframes pulse-animation {
-            0% { transform: scale(1); opacity: 1; }
+            0% { transform: scale(1); opacity: 0.8; }
             100% { transform: scale(4); opacity: 0; }
         }
 
@@ -66,7 +66,7 @@
 <body>
 
 <div class="search-box">
-    <input type="text" id="search" placeholder="Поиск ТК..." autocomplete="off">
+    <input type="text" id="search" placeholder="Поиск ТК (номер)..." autocomplete="off">
     <div id="results"></div>
 </div>
 
@@ -76,8 +76,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
 <script>
-    const dgis = L.tileLayer('https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', { subdomains: '0123' });
-    const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains: ['mt0','mt1','mt2','mt3'] });
+    // 1. Инициализация слоев
+    const dgis = L.tileLayer('https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', { subdomains: '0123', attribution: '2GIS' });
+    const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains: ['mt0','mt1','mt2','mt3'], attribution: 'Google' });
     
     const map = L.map('map', {
         center: [52.287, 76.967], zoom: 14,
@@ -90,37 +91,65 @@
     };
     L.control.layers(baseMaps, null, { collapsed: true, position: 'bottomright' }).addTo(map);
 
+    // ССЫЛКА (НЕ ЗАБУДЬ ЗАМЕНИТЬ!)
     const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
+
     let markersData = [];
 
-    // Загрузка ТК
+    // Функция нормализации текста (для поиска)
+    function clean(text) {
+        if (!text) return "";
+        return text.toString().toLowerCase()
+            .replace(/t/g, 'т').replace(/k/g, 'к') 
+            .replace(/[^а-яё0-9]/g, '');
+    }
+
+    // 2. Загрузка данных ТК
     Papa.parse(tableUrl, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
+            console.log("Данные загружены:", results.data);
             results.data.forEach(row => {
+                const name = row.name || row.Name || "";
                 const lat = parseFloat(row.lat || row.Lat);
                 const lng = parseFloat(row.lng || row.Lng);
+                const desc = row.description || row.Description || "";
+
                 if (!isNaN(lat) && !isNaN(lng)) {
-                    const m = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${row.name || "ТК"}</b><br>${row.description || ""}`);
-                    markersData.push({ cleanName: (row.name || "").toString().toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, ''), realName: row.name, marker: m });
+                    const m = L.marker([lat, lng]).addTo(map);
+                    m.bindPopup(`<b>ТК: ${name}</b><br>${desc}`);
+                    
+                    markersData.push({
+                        cleanName: clean(name),
+                        realName: name,
+                        marker: m
+                    });
                 }
             });
         }
     });
 
-    // ПОИСК
+    // 3. Логика поиска
     const input = document.getElementById('search');
     const resDiv = document.getElementById('results');
+
     input.addEventListener('input', () => {
-        const query = input.value.toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, '');
+        const query = clean(input.value);
         resDiv.innerHTML = '';
-        if (query.length < 1) { resDiv.style.display = 'none'; return; }
+        
+        if (query.length < 1) {
+            resDiv.style.display = 'none';
+            return;
+        }
+
         const found = markersData.filter(x => x.cleanName.includes(query));
+        
         if (found.length > 0) {
             resDiv.style.display = 'block';
             found.forEach(x => {
                 const d = document.createElement('div');
-                d.className = 'item'; d.innerHTML = `📍 <b>${x.realName}</b>`;
+                d.className = 'item';
+                d.innerHTML = `📍 ТК: <b>${x.realName}</b>`;
                 d.onclick = () => {
                     map.setView(x.marker.getLatLng(), 18);
                     x.marker.openPopup();
@@ -129,15 +158,17 @@
                 };
                 resDiv.appendChild(d);
             });
-        } else { resDiv.style.display = 'none'; }
+        } else {
+            resDiv.style.display = 'none';
+        }
     });
 
-    // ГЕОЛОКАЦИЯ С АНИМАЦИЕЙ
+    // 4. ГЕОЛОКАЦИЯ С АНИМАЦИЕЙ
     const userIcon = L.divIcon({
-        className: 'user-location-wrapper',
+        className: 'custom-div-icon',
         html: '<div class="user-location-marker"><div class="pulse"></div></div>',
-        iconSize: [18, 18],
-        iconAnchor: [9, 9]
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
     });
 
     map.locate({setView: false, watch: true, enableHighAccuracy: true});
@@ -147,7 +178,13 @@
             window.userMarker.setLatLng(e.latlng);
         } else {
             window.userMarker = L.marker(e.latlng, {icon: userIcon}).addTo(map);
+            // При первом нахождении можно центрировать карту на пользователе
+            // map.setView(e.latlng, 16); 
         }
+    });
+
+    map.on('locationerror', (e) => {
+        console.warn("Геолокация недоступна:", e.message);
     });
 </script>
 </body>
