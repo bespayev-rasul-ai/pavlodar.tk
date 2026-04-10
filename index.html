@@ -7,64 +7,52 @@
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        /* СБРОС СТИЛЕЙ ДЛЯ СТАБИЛЬНОСТИ */
-        html, body { margin: 0; padding: 0; height: 100%; width: 100%; font-family: -apple-system, sans-serif; }
-        #map { height: 100vh; width: 100%; z-index: 1; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: -apple-system, sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
         
-        /* СОВРЕМЕННЫЙ ПОИСК СВЕРХУ */
+        /* ПАНЕЛЬ ПОИСКА - Сделали короче (right: 70px), чтобы освободить место справа */
         .search-box {
-            position: absolute; top: 15px; left: 15px; right: 15px;
-            z-index: 1000; background: white; padding: 6px;
-            border-radius: 14px; box-shadow: 0 4px 25px rgba(0,0,0,0.15);
-            max-width: 400px; /* Для компьютера */
+            position: absolute; top: 12px; left: 12px; right: 70px;
+            z-index: 2000; background: white; padding: 5px;
+            border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
         input {
-            width: 100%; padding: 12px 15px; border: 1px solid #e0e0e0;
-            border-radius: 10px; font-size: 16px; outline: none; box-sizing: border-box;
-            background: #fcfcfc; transition: 0.2s; -webkit-appearance: none; /* iOS */
+            width: 100%; padding: 12px; border: 1px solid #ddd;
+            border-radius: 8px; font-size: 16px; outline: none; box-sizing: border-box;
+            -webkit-appearance: none;
         }
-        input:focus { border-color: #007bff; background: #fff; box-shadow: 0 0 0 3px rgba(0,123,255,0.05); }
         
-        /* РЕЗУЛЬТАТЫ ПОИСКА */
         #results {
-            background: white; max-height: 250px; overflow-y: auto;
-            border-radius: 10px; display: none; margin-top: 8px; border: 1px solid #eee;
+            background: white; max-height: 200px; overflow-y: auto;
+            border-radius: 8px; display: none; margin-top: 5px; border: 1px solid #eee;
         }
-        .item { padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f2f2f2; font-size: 15px; color: #333; }
-        .item:last-child { border-bottom: none; }
-        .item:active { background: #f0f7ff; }
+        .item { padding: 12px; border-bottom: 1px solid #f2f2f2; font-size: 15px; }
 
-        /* ЭСТЕТИЧНЫЙ ПЕРЕКЛЮЧАТЕЛЬ СЛОЕВ - ПЕРЕНЕСЕН ВНИЗ ВЛЕВО */
+        /* КНОПКА СЛОЕВ - Теперь она в углу и её ничего не жмет */
+        .leaflet-top.leaflet-right { top: 7px !important; right: 7px !important; }
+        
         .leaflet-control-layers {
-            margin-bottom: 25px !important; margin-left: 15px !important; /* Удобный отступ от угла */
             border: none !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
-            border-radius: 12px !important;
-            padding: 4px !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+            border-radius: 10px !important;
+            z-index: 3000 !important;
         }
-        /* Увеличиваем иконку слоев для удобного нажатия пальцем */
         .leaflet-control-layers-toggle {
-            width: 44px !important; height: 44px !important;
+            width: 50px !important; height: 50px !important;
+            background-color: white !important;
+            border-radius: 10px !important;
             background-size: 26px 26px !important;
         }
-        /* Стиль развернутого меню */
-        .leaflet-control-layers-expanded {
-            padding: 10px 15px !important; color: #333; font-size: 14px; line-height: 1.8;
-            border-radius: 10px;
-        }
-        .leaflet-control-layers-selector { margin-right: 8px; margin-top: 3px; }
 
-        /* УБИРАЕМ КНОПКИ +- (чтобы не мешали), ИСПРАВЛЯЕМ ПОПАПЫ */
-        .leaflet-control-zoom { display: none !important; } /* Скрываем +- */
-        .leaflet-popup-content-wrapper { border-radius: 10px; padding: 5px; }
-        .leaflet-popup-content b { color: #007bff; }
-    
+        /* Убираем лишнее */
+        .leaflet-control-zoom { display: none !important; }
+        .leaflet-control-attribution { font-size: 9px !important; }
     </style>
 </head>
 <body>
 
 <div class="search-box">
-    <input type="text" id="search" placeholder="Поиск (номер ТК)..." autocomplete="off" autocorrect="off">
+    <input type="text" id="search" placeholder="Поиск ТК..." autocomplete="off">
     <div id="results"></div>
 </div>
 
@@ -74,74 +62,48 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
 <script>
-    // 1. Настройка слоев
-    const dgis = L.tileLayer('https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', {
-        subdomains: '0123', attribution: '© 2GIS'
-    });
-    const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-        subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google Satellite'
-    });
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
+    // 1. Слои
+    const dgis = L.tileLayer('https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', { subdomains: '0123' });
+    const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains: ['mt0','mt1','mt2','mt3'] });
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
 
-    // 2. Инициализация карты (без лишних контролов)
+    // 2. Карта
     const map = L.map('map', {
-        center: [52.287, 76.967],
-        zoom: 14,
-        layers: [dgis], // 2ГИС по умолчанию
-        zoomControl: false, // Отключаем кнопки +- (они не нужны при тач-зуме)
-        attributionControl: false // Скрываем лишний текст в углу
+        center: [52.287, 76.967], zoom: 14,
+        layers: [dgis], zoomControl: false
     });
 
-    // 3. МЕНЮ СЛОЕВ - ПЕРЕНЕСЕНО ВНИЗ ВЛЕВО И ВСЕГДА СВЕРНУТО (ICON VIEW)
-    const baseMaps = {
-        "<span style='font-weight:bold;'>🗺️ 2ГИС Карта</span>": dgis,
-        "<span style='font-weight:bold;'>🛰️ Спутник</span>": googleSat,
-        "<span style='font-weight:bold;'>🏁 Схема OSM</span>": osm
-    };
-    
-    // collapsed: true гарантирует, что это будет иконка, а не список
-    L.control.layers(baseMaps, null, { collapsed: true, position: 'bottomleft' }).addTo(map);
+    // 3. Переключатель (вверху справа)
+    const baseMaps = { "🗺️ Карта": dgis, "🛰️ Спутник": googleSat, "🏁 OSM": osm };
+    L.control.layers(baseMaps, null, { collapsed: true }).addTo(map);
 
-    // 4. Ваша ссылка на Google CSV (ВАЖНО: ПОДСТАВЬТЕ СВОЮ!)
+    // 4. Твоя ссылка CSV (ОБЯЗАТЕЛЬНО ПОДСТАВЬ СВОЮ)
     const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
 
     let markersData = [];
-
-    // Функция очистки для поиска
     function clean(text) {
-        if (!text) return "";
-        return text.toString().toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, '');
+        return text ? text.toString().toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, '') : "";
     }
 
-    // Загрузка данных
-    function loadData() {
-        Papa.parse(tableUrl, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: function(results) {
-                console.log("Данные загружены:", results.data);
-                results.data.forEach(row => {
-                    const name = row.name || row.Name || "";
-                    const lat = parseFloat(row.lat || row.Lat);
-                    const lng = parseFloat(row.lng || row.Lng);
-                    const desc = row.description || row.Description || "";
+    // Загрузка
+    Papa.parse(tableUrl, {
+        download: true, header: true, skipEmptyLines: true,
+        complete: function(results) {
+            results.data.forEach(row => {
+                const name = row.name || row.Name || "";
+                const lat = parseFloat(row.lat || row.Lat);
+                const lng = parseFloat(row.lng || row.Lng);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    const m = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${name}</b><br>${row.description || ""}`);
+                    markersData.push({ cleanName: clean(name), realName: name, marker: m });
+                }
+            });
+        }
+    });
 
-                    if (!isNaN(lat) && !isNaN(lng)) {
-                        const m = L.marker([lat, lng]).addTo(map);
-                        m.bindPopup(`<div style="font-size:14px; width:200px;"><b>ТК: ${name}</b><br>${desc}</div>`);
-                        
-                        markersData.push({ cleanName: clean(name), realName: name, marker: m });
-                    }
-                });
-            }
-        });
-    }
-
-    // Логика поиска
+    // Поиск
     const input = document.getElementById('search');
     const resDiv = document.getElementById('results');
-
     input.addEventListener('input', () => {
         const query = clean(input.value);
         resDiv.innerHTML = '';
@@ -151,8 +113,7 @@
             resDiv.style.display = 'block';
             found.forEach(x => {
                 const d = document.createElement('div');
-                d.className = 'item';
-                d.innerHTML = `📍 ТК: <b>${x.realName}</b>`;
+                d.className = 'item'; d.innerHTML = `📍 <b>${x.realName}</b>`;
                 d.onclick = () => {
                     map.setView(x.marker.getLatLng(), 18);
                     x.marker.openPopup();
@@ -164,14 +125,12 @@
         } else { resDiv.style.display = 'none'; }
     });
 
-    // Геолокация
+    // Моя позиция
     map.locate({setView: false, watch: true});
     map.on('locationfound', (e) => {
         if (window.userMarker) { window.userMarker.setLatLng(e.latlng); } 
         else { window.userMarker = L.circleMarker(e.latlng, {radius: 6, color: '#007bff', fillColor: '#007bff', fillOpacity: 1}).addTo(map); }
     });
-
-    loadData();
 </script>
 </body>
 </html>
