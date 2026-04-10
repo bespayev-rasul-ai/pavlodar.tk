@@ -115,6 +115,16 @@
     });
 
     loadData();
+    map.locate({setView: false, watch: true});
+
+function onLocationFound(e) {
+    if (window.userMarker) {
+        window.userMarker.setLatLng(e.latlng);
+    } else {
+        window.userMarker = L.circleMarker(e.latlng, {radius: 8, color: 'blue'}).addTo(map).bindPopup("Вы здесь");
+    }
+}
+map.on('locationfound', onLocationFound);
 </script>
 </body>
 </html>
