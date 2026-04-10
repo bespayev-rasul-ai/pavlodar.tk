@@ -2,148 +2,119 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта ТК ССР Павлодар</title>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Карта ТК</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { margin: 0; padding: 0; font-family: sans-serif; }
         #map { height: 100vh; width: 100%; z-index: 1; }
-        
-        .search-container {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            right: 15px; /* Для удобства на мобильных */
+        .search-box {
+            position: absolute; top: 10px; left: 10px; right: 10px;
+            z-index: 1000; background: white; padding: 10px;
+            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             max-width: 400px;
-            z-index: 1000;
-            background: white;
-            padding: 8px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
         }
-        input#search-input {
-            width: 100%;
-            padding: 12px;
-            box-sizing: border-box;
-            border: 2px solid #007bff;
-            border-radius: 8px;
-            font-size: 16px; /* Чтобы iPhone не увеличивал масштаб при вводе */
-            outline: none;
+        input {
+            width: 100%; padding: 12px; border: 2px solid #007bff;
+            border-radius: 5px; font-size: 16px; outline: none; box-sizing: border-box;
         }
         #results {
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 8px;
-            display: none;
-            background: white;
-            border-radius: 8px;
+            background: white; max-height: 250px; overflow-y: auto;
+            border-radius: 0 0 5px 5px; display: none; border: 1px solid #ccc; border-top: none;
         }
-        .result-item {
-            padding: 12px;
-            cursor: pointer;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 15px;
-        }
-        .result-item:last-child { border-bottom: none; }
-        .result-item:active { background: #e9ecef; }
-        .result-item b { color: #007bff; }
+        .item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 16px; }
+        .item:active { background: #e9ecef; }
     </style>
 </head>
 <body>
 
-    <div class="search-container">
-        <input type="text" id="search-input" placeholder="Поиск ТК (напр. 97 или тк97)..." autocomplete="off">
-        <div id="results"></div>
-    </div>
+<div class="search-box">
+    <input type="text" id="search" placeholder="Поиск ТК (например: 97)" autocomplete="off">
+    <div id="results"></div>
+</div>
 
-    <div id="map"></div>
+<div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
-    <script>
-        const map = L.map('map').setView([52.287, 76.967], 14);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+<script>
+    // Инициализация карты (Павлодар)
+    const map = L.map('map').setView([52.287, 76.967], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        // ВСТАВЬ СЮДА СВОЮ ССЫЛКУ CSV
-        const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
+    // ВАЖНО: Ссылка обязательно в кавычках!
+    const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSPhgAnlW6nshj8j0YmP48C4K_H3H0vW94HlY8rE_m5C5pS9lA/pub?output=csv'; 
 
-        let allMarkers = [];
+    let markersData = [];
 
-        // Функция нормализации: всё в нижний регистр, латиницу в кириллицу, убираем лишнее
-        function normalize(text) {
-            if (!text) return "";
-            return text.toString()
-                .toLowerCase()
-                .replace(/t/g, 'т') // англ t -> рус т
-                .replace(/k/g, 'к') // англ k -> рус к
-                .replace(/[^а-яё0-9]/g, ''); // оставляем только русские буквы и цифры
-        }
+    // Функция очистки для поиска (любой регистр и раскладка)
+    function clean(text) {
+        if (!text) return "";
+        return text.toString().toLowerCase()
+            .replace(/t/g, 'т').replace(/k/g, 'к') 
+            .replace(/[^а-яё0-9]/g, '');
+    }
 
-        function loadMarkers() {
-            Papa.parse(tableUrl, {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    results.data.forEach(row => {
-                        // Проверяем разные варианты написания заголовков
-                        const name = row.name || row.Name || row['Имя'] || "";
-                        const lat = parseFloat(row.lat || row.Lat || row['Широта']);
-                        const lng = parseFloat(row.lng || row.Lng || row['Долгота']);
-                        const desc = row.description || row.Description || row['Описание'] || "";
+    function loadData() {
+        Papa.parse(tableUrl, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                console.log("Данные из таблицы:", results.data);
+                
+                results.data.forEach(row => {
+                    // Проверяем и большие, и маленькие буквы в заголовках
+                    const name = row.Name || row.name || "Без имени";
+                    const lat = parseFloat(row.Lat || row.lat);
+                    const lng = parseFloat(row.Lng || row.lng);
+                    const desc = row.description || row.Description || "";
 
-                        if (!isNaN(lat) && !isNaN(lng)) {
-                            const marker = L.marker([lat, lng]).addTo(map);
-                            marker.bindPopup(`<b>ТК: ${name}</b><br>${desc}`);
-                            
-                            allMarkers.push({
-                                searchName: normalize(name), // "Чистое" имя для поиска
-                                originalName: name,
-                                marker: marker
-                            });
-                        }
-                    });
-                }
-            });
-        }
-
-        const searchInput = document.getElementById('search-input');
-        const resultsContainer = document.getElementById('results');
-
-        searchInput.addEventListener('input', (e) => {
-            const val = normalize(e.target.value);
-            resultsContainer.innerHTML = '';
-            
-            if (val.length < 1) {
-                resultsContainer.style.display = 'none';
-                return;
-            }
-
-            // Ищем совпадение
-            const filtered = allMarkers.filter(m => m.searchName.includes(val));
-            
-            if (filtered.length > 0) {
-                resultsContainer.style.display = 'block';
-                filtered.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'result-item';
-                    div.innerHTML = `Найдено: <b>${item.originalName}</b>`;
-                    div.onclick = () => {
-                        map.setView(item.marker.getLatLng(), 18);
-                        item.marker.openPopup();
-                        resultsContainer.style.display = 'none';
-                        searchInput.value = item.originalName;
-                    };
-                    resultsContainer.appendChild(div);
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        const m = L.marker([lat, lng]).addTo(map);
+                        m.bindPopup(`<b>${name}</b><br>${desc}`);
+                        
+                        markersData.push({
+                            cleanName: clean(name),
+                            realName: name,
+                            marker: m
+                        });
+                    }
                 });
-            } else {
-                resultsContainer.style.display = 'none';
             }
         });
+    }
 
-        loadMarkers();
-    </script>
+    const input = document.getElementById('search');
+    const resDiv = document.getElementById('results');
+
+    input.addEventListener('input', () => {
+        const query = clean(input.value);
+        resDiv.innerHTML = '';
+        if (query.length < 1) { resDiv.style.display = 'none'; return; }
+
+        const found = markersData.filter(x => x.cleanName.includes(query));
+        if (found.length > 0) {
+            resDiv.style.display = 'block';
+            found.forEach(x => {
+                const d = document.createElement('div');
+                d.className = 'item';
+                d.innerHTML = `Найдено: <b>${x.realName}</b>`;
+                d.onclick = () => {
+                    map.setView(x.marker.getLatLng(), 18);
+                    x.marker.openPopup();
+                    resDiv.style.display = 'none';
+                    input.value = x.realName;
+                };
+                resDiv.appendChild(d);
+            });
+        } else {
+            resDiv.style.display = 'none';
+        }
+    });
+
+    loadData();
+</script>
 </body>
 </html>
