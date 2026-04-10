@@ -4,188 +4,483 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Карта ТК Павлодар</title>
-    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: -apple-system, sans-serif; }
-        #map { height: 100vh; width: 100%; z-index: 1; }
-        
-        /* ПОИСК */
-        .search-box {
-            position: absolute; top: 15px; left: 15px; right: 15px;
-            z-index: 2000; background: white; padding: 5px;
-            border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            max-width: 400px;
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --accent: #2563eb;
+            --accent-light: #dbeafe;
+            --bg: #ffffff;
+            --text: #1e293b;
+            --muted: #94a3b8;
+            --border: #e2e8f0;
+            --shadow: 0 4px 24px rgba(0,0,0,0.12);
+            --radius: 14px;
         }
-        input {
-            width: 100%; padding: 12px; border: 1px solid #ddd;
-            border-radius: 8px; font-size: 16px; outline: none; box-sizing: border-box;
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Nunito', -apple-system, sans-serif;
+            background: #f1f5f9;
         }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* ── ПАНЕЛЬ ПОИСКА ── */
+        .search-panel {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 32px);
+            max-width: 420px;
+            z-index: 2000;
+        }
+
+        .search-wrap {
+            background: var(--bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .search-input-row {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px 6px 16px;
+            gap: 8px;
+        }
+
+        .search-icon {
+            color: var(--muted);
+            flex-shrink: 0;
+            font-size: 18px;
+        }
+
+        #search {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-family: 'Nunito', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            background: transparent;
+            padding: 10px 0;
+        }
+
+        #search::placeholder { color: var(--muted); font-weight: 400; }
+
+        #clear-btn {
+            display: none;
+            background: var(--border);
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--muted);
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: center;
+        }
+        #clear-btn.visible { display: flex; }
+
+        .search-divider { height: 1px; background: var(--border); display: none; }
+        .search-divider.visible { display: block; }
+
         #results {
-            background: white; max-height: 250px; overflow-y: auto;
-            border-radius: 8px; display: none; margin-top: 5px; border: 1px solid #eee;
+            max-height: 260px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
         }
-        .item { padding: 12px; border-bottom: 1px solid #f2f2f2; font-size: 16px; color: #333; cursor: pointer; }
-        .item:active { background: #f0f7ff; }
 
-        /* КНОПКА СЛОЕВ */
-        .leaflet-bottom.leaflet-right { bottom: 30px !important; right: 15px !important; }
-        .leaflet-control-layers { border: none !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important; border-radius: 12px !important; }
+        .result-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+        .result-item:last-child { border-bottom: none; }
+        .result-item:active, .result-item:hover { background: var(--accent-light); }
+
+        .result-pin {
+            width: 28px;
+            height: 28px;
+            background: var(--accent-light);
+            color: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 15px;
+        }
+
+        .result-sub {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        .no-results {
+            padding: 16px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        /* ── TOAST УВЕДОМЛЕНИЯ ── */
+        #toast {
+            position: absolute;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #1e293b;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 40px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 3000;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ── КНОПКА ГЕОЛОКАЦИИ ── */
+        .btn-locate {
+            position: absolute;
+            bottom: 40px;
+            right: 16px;
+            z-index: 2000;
+            width: 52px;
+            height: 52px;
+            background: var(--bg);
+            border: none;
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .btn-locate:active { transform: scale(0.93); background: var(--accent-light); }
+
+        /* ── ПЕРЕКЛЮЧАТЕЛЬ СЛОЕВ ── */
+        .leaflet-control-layers {
+            border: none !important;
+            box-shadow: var(--shadow) !important;
+            border-radius: var(--radius) !important;
+        }
         .leaflet-control-layers-toggle {
-            width: 56px !important; height: 56px !important;
-            background-image: none !important; background-color: white !important;
-            display: flex; align-items: center; justify-content: center; border-radius: 12px !important;
+            width: 52px !important;
+            height: 52px !important;
+            background-image: none !important;
+            background-color: var(--bg) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border-radius: var(--radius) !important;
         }
-        .leaflet-control-layers-toggle::after { content: "🗺️"; font-size: 28px; }
+        .leaflet-control-layers-toggle::after { content: "🗺️"; font-size: 24px; }
+        .leaflet-bottom.leaflet-right { bottom: 40px !important; right: 76px !important; }
+        .leaflet-control-zoom { display: none !important; }
+        .leaflet-control-attribution { font-size: 10px !important; }
 
-        /* АНИМАЦИЯ ТОЧКИ "Я ЗДЕСЬ" */
-        .user-location-marker {
-            width: 16px; height: 16px;
-            background: #007bff;
+        /* ── МАРКЕР ПОЛЬЗОВАТЕЛЯ ── */
+        .user-dot {
+            width: 14px; height: 14px;
+            background: var(--accent);
             border: 3px solid white;
             border-radius: 50%;
-            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            box-shadow: 0 2px 8px rgba(37,99,235,0.5);
             position: relative;
         }
-        .pulse {
-            width: 16px; height: 16px;
-            background: rgba(0, 123, 255, 0.6);
+        .user-pulse {
+            width: 14px; height: 14px;
+            background: rgba(37,99,235,0.35);
             border-radius: 50%;
             position: absolute;
             top: 0; left: 0;
-            animation: pulse-animation 2s infinite;
+            animation: pulse 2s infinite;
         }
-        @keyframes pulse-animation {
-            0% { transform: scale(1); opacity: 0.8; }
+        @keyframes pulse {
+            0%   { transform: scale(1); opacity: 0.8; }
             100% { transform: scale(4); opacity: 0; }
         }
 
-        .leaflet-control-zoom { display: none !important; }
+        /* ── POPUP ── */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px !important;
+            box-shadow: var(--shadow) !important;
+            font-family: 'Nunito', sans-serif !important;
+        }
+        .leaflet-popup-content {
+            margin: 12px 16px !important;
+            font-size: 14px !important;
+            line-height: 1.5 !important;
+        }
+        .popup-title {
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+        .popup-desc { color: var(--text); }
     </style>
 </head>
 <body>
 
-<div class="search-box">
-    <input type="text" id="search" placeholder="Поиск ТК (номер)..." autocomplete="off">
-    <div id="results"></div>
+<!-- ПОИСК -->
+<div class="search-panel">
+    <div class="search-wrap">
+        <div class="search-input-row">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search" placeholder="Поиск по номеру ТК..." autocomplete="off">
+            <button id="clear-btn" aria-label="Очистить">✕</button>
+        </div>
+        <div class="search-divider" id="divider"></div>
+        <div id="results"></div>
+    </div>
 </div>
 
+<!-- КАРТА -->
 <div id="map"></div>
+
+<!-- КНОПКА ГЕОЛОКАЦИИ -->
+<button class="btn-locate" id="btn-locate" title="Моё местоположение">📍</button>
+
+<!-- TOAST -->
+<div id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-
 <script>
-    // 1. Инициализация слоев
-    const dgis = L.tileLayer('https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', { subdomains: '0123', attribution: '2GIS' });
-    const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains: ['mt0','mt1','mt2','mt3'], attribution: 'Google' });
-    
+(function () {
+    /* ─── НАСТРОЙКИ ─────────────────────────────── */
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv';   // ← заменить
+    const MAP_CENTER = [52.287, 76.967];
+    const MAP_ZOOM   = 14;
+
+    /* ─── СЛОИ ──────────────────────────────────── */
+    const dgis = L.tileLayer(
+        'https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1',
+        { subdomains: '0123', attribution: '2GIS' }
+    );
+    const googleSat = L.tileLayer(
+        'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+        { subdomains: ['mt0','mt1','mt2','mt3'], attribution: 'Google Satellite' }
+    );
+
     const map = L.map('map', {
-        center: [52.287, 76.967], zoom: 14,
-        layers: [dgis], zoomControl: false
+        center: MAP_CENTER,
+        zoom: MAP_ZOOM,
+        layers: [dgis],
+        zoomControl: false
     });
 
-    const baseMaps = { 
-        "<span style='font-size:16px;'>🗺️ 2ГИС</span>": dgis, 
-        "<span style='font-size:16px;'>🛰️ Спутник</span>": googleSat 
-    };
-    L.control.layers(baseMaps, null, { collapsed: true, position: 'bottomright' }).addTo(map);
+    L.control.layers(
+        {
+            "<span style='font-size:15px'>🗺️ 2ГИС</span>": dgis,
+            "<span style='font-size:15px'>🛰️ Спутник</span>": googleSat
+        },
+        null,
+        { collapsed: true, position: 'bottomright' }
+    ).addTo(map);
 
-    // ССЫЛКА (НЕ ЗАБУДЬ ЗАМЕНИТЬ!)
-    const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
-
-    let markersData = [];
-
-    // Функция нормализации текста (для поиска)
-    function clean(text) {
-        if (!text) return "";
-        return text.toString().toLowerCase()
-            .replace(/t/g, 'т').replace(/k/g, 'к') 
-            .replace(/[^а-яё0-9]/g, '');
+    /* ─── TOAST ─────────────────────────────────── */
+    let toastTimer;
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
     }
 
-    // 2. Загрузка данных ТК
-    Papa.parse(tableUrl, {
-        download: true, header: true, skipEmptyLines: true,
-        complete: function(results) {
-            console.log("Данные загружены:", results.data);
-            results.data.forEach(row => {
-                const name = row.name || row.Name || "";
-                const lat = parseFloat(row.lat || row.Lat);
-                const lng = parseFloat(row.lng || row.Lng);
-                const desc = row.description || row.Description || "";
+    /* ─── МАРКЕРЫ ───────────────────────────────── */
+    const markersData = [];
 
-                if (!isNaN(lat) && !isNaN(lng)) {
-                    const m = L.marker([lat, lng]).addTo(map);
-                    m.bindPopup(`<b>ТК: ${name}</b><br>${desc}`);
-                    
-                    markersData.push({
-                        cleanName: clean(name),
-                        realName: name,
-                        marker: m
-                    });
-                }
+    /* Нормализация текста для поиска:
+       транслит латиница→кириллица + оставляем только буквы/цифры */
+    const TRANSLIT = {
+        a:'а', b:'б', c:'с', d:'д', e:'е', f:'ф', g:'г', h:'х',
+        i:'и', j:'й', k:'к', l:'л', m:'м', n:'н', o:'о', p:'п',
+        q:'к', r:'р', s:'с', t:'т', u:'у', v:'в', w:'в', x:'кс',
+        y:'у', z:'з'
+    };
+    function normalize(str) {
+        if (!str) return '';
+        return str.toString().toLowerCase()
+            .replace(/[a-z]/g, ch => TRANSLIT[ch] || ch)
+            .replace(/[^а-яёa-z0-9]/g, '');
+    }
+
+    /* ─── ЗАГРУЗКА CSV ──────────────────────────── */
+    Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function (results) {
+            if (!results.data.length) {
+                showToast('⚠️ CSV пустой или не загрузился');
+                return;
+            }
+
+            results.data.forEach(row => {
+                const name = (row.name || row.Name || '').trim();
+                const lat  = parseFloat(row.lat  || row.Lat);
+                const lng  = parseFloat(row.lng  || row.Lng);
+                const desc = (row.description || row.Description || '').trim();
+
+                if (isNaN(lat) || isNaN(lng)) return;
+
+                const marker = L.marker([lat, lng]).addTo(map);
+                marker.bindPopup(
+                    `<div class="popup-title">ТК: ${name}</div>` +
+                    (desc ? `<div class="popup-desc">${desc}</div>` : '')
+                );
+
+                markersData.push({
+                    key: normalize(name),
+                    name,
+                    desc,
+                    marker
+                });
             });
+
+            showToast(`✅ Загружено ${markersData.length} объектов`);
+        },
+        error: function (err) {
+            console.error('Ошибка загрузки CSV:', err);
+            showToast('❌ Не удалось загрузить данные');
         }
     });
 
-    // 3. Логика поиска
-    const input = document.getElementById('search');
-    const resDiv = document.getElementById('results');
+    /* ─── ПОИСК ─────────────────────────────────── */
+    const input   = document.getElementById('search');
+    const resDiv  = document.getElementById('results');
+    const clearBtn= document.getElementById('clear-btn');
+    const divider = document.getElementById('divider');
+
+    function hideResults() {
+        resDiv.innerHTML = '';
+        divider.classList.remove('visible');
+    }
+
+    function clearSearch() {
+        input.value = '';
+        clearBtn.classList.remove('visible');
+        hideResults();
+        input.focus();
+    }
+
+    clearBtn.addEventListener('click', clearSearch);
 
     input.addEventListener('input', () => {
-        const query = clean(input.value);
+        const q = normalize(input.value);
+        clearBtn.classList.toggle('visible', input.value.length > 0);
+
+        if (q.length < 1) { hideResults(); return; }
+
+        const found = markersData.filter(x => x.key.includes(q));
         resDiv.innerHTML = '';
-        
-        if (query.length < 1) {
-            resDiv.style.display = 'none';
+
+        if (found.length === 0) {
+            divider.classList.add('visible');
+            resDiv.innerHTML = '<div class="no-results">Ничего не найдено</div>';
             return;
         }
 
-        const found = markersData.filter(x => x.cleanName.includes(query));
-        
-        if (found.length > 0) {
-            resDiv.style.display = 'block';
-            found.forEach(x => {
-                const d = document.createElement('div');
-                d.className = 'item';
-                d.innerHTML = `📍 ТК: <b>${x.realName}</b>`;
-                d.onclick = () => {
-                    map.setView(x.marker.getLatLng(), 18);
-                    x.marker.openPopup();
-                    resDiv.style.display = 'none';
-                    input.value = x.realName;
-                };
-                resDiv.appendChild(d);
+        divider.classList.add('visible');
+        found.slice(0, 20).forEach(x => {
+            const el = document.createElement('div');
+            el.className = 'result-item';
+            el.innerHTML = `
+                <div class="result-pin">📦</div>
+                <div>
+                    <div>ТК: <b>${x.name}</b></div>
+                    ${x.desc ? `<div class="result-sub">${x.desc}</div>` : ''}
+                </div>`;
+            el.addEventListener('click', () => {
+                map.setView(x.marker.getLatLng(), 18);
+                x.marker.openPopup();
+                input.value = x.name;
+                clearBtn.classList.add('visible');
+                hideResults();
             });
-        } else {
-            resDiv.style.display = 'none';
-        }
+            resDiv.appendChild(el);
+        });
     });
 
-    // 4. ГЕОЛОКАЦИЯ С АНИМАЦИЕЙ
+    /* Скрываем результаты при тапе по карте */
+    map.on('click', hideResults);
+
+    /* ─── ГЕОЛОКАЦИЯ ────────────────────────────── */
     const userIcon = L.divIcon({
-        className: 'custom-div-icon',
-        html: '<div class="user-location-marker"><div class="pulse"></div></div>',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
+        className: '',
+        html: '<div class="user-dot"><div class="user-pulse"></div></div>',
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
     });
 
-    map.locate({setView: false, watch: true, enableHighAccuracy: true});
-    
-    map.on('locationfound', (e) => {
-        if (window.userMarker) {
-            window.userMarker.setLatLng(e.latlng);
+    let userMarker = null;
+    let locationFound = false;
+
+    map.on('locationfound', e => {
+        if (userMarker) {
+            userMarker.setLatLng(e.latlng);
         } else {
-            window.userMarker = L.marker(e.latlng, {icon: userIcon}).addTo(map);
-            // При первом нахождении можно центрировать карту на пользователе
-            // map.setView(e.latlng, 16); 
+            userMarker = L.marker(e.latlng, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+        }
+        locationFound = true;
+    });
+
+    map.on('locationerror', e => {
+        console.warn('Геолокация:', e.message);
+        showToast('📍 Геолокация недоступна');
+    });
+
+    /* Автостарт слежения */
+    map.locate({ setView: false, watch: true, enableHighAccuracy: true });
+
+    /* Кнопка "перейти к себе" */
+    document.getElementById('btn-locate').addEventListener('click', () => {
+        if (userMarker) {
+            map.setView(userMarker.getLatLng(), 17);
+        } else if (!locationFound) {
+            map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true });
+            showToast('🔍 Определяем местоположение…');
+        } else {
+            showToast('📍 Местоположение ещё не определено');
         }
     });
 
-    map.on('locationerror', (e) => {
-        console.warn("Геолокация недоступна:", e.message);
-    });
+})();
 </script>
 </body>
 </html>
