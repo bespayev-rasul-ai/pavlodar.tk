@@ -3,50 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Карта ТК</title>
+    <title>Карта ТК Павлодар</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: -apple-system, sans-serif; }
         #map { height: 100vh; width: 100%; z-index: 1; }
         
-        /* ПАНЕЛЬ ПОИСКА - Сделали короче (right: 70px), чтобы освободить место справа */
+        /* ПОИСК */
         .search-box {
-            position: absolute; top: 12px; left: 12px; right: 70px;
+            position: absolute; top: 15px; left: 15px; right: 15px;
             z-index: 2000; background: white; padding: 5px;
             border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            max-width: 400px;
         }
         input {
             width: 100%; padding: 12px; border: 1px solid #ddd;
             border-radius: 8px; font-size: 16px; outline: none; box-sizing: border-box;
-            -webkit-appearance: none;
         }
-        
         #results {
             background: white; max-height: 200px; overflow-y: auto;
             border-radius: 8px; display: none; margin-top: 5px; border: 1px solid #eee;
         }
-        .item { padding: 12px; border-bottom: 1px solid #f2f2f2; font-size: 15px; }
+        .item { padding: 12px; border-bottom: 1px solid #f2f2f2; font-size: 16px; color: #333; }
 
-        /* КНОПКА СЛОЕВ - Теперь она в углу и её ничего не жмет */
-        .leaflet-top.leaflet-right { top: 7px !important; right: 7px !important; }
-        
-        .leaflet-control-layers {
-            border: none !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
-            border-radius: 10px !important;
-            z-index: 3000 !important;
-        }
+        /* КНОПКА СЛОЕВ */
+        .leaflet-bottom.leaflet-right { bottom: 30px !important; right: 15px !important; }
+        .leaflet-control-layers { border: none !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important; border-radius: 12px !important; }
         .leaflet-control-layers-toggle {
-            width: 50px !important; height: 50px !important;
-            background-color: white !important;
-            border-radius: 10px !important;
-            background-size: 26px 26px !important;
+            width: 56px !important; height: 56px !important;
+            background-image: none !important; background-color: white !important;
+            display: flex; align-items: center; justify-content: center; border-radius: 12px !important;
+        }
+        .leaflet-control-layers-toggle::after { content: "🗺️"; font-size: 28px; }
+
+        /* АНИМАЦИЯ ТОЧКИ "Я ЗДЕСЬ" (КАК В 2ГИС) */
+        .user-location-marker {
+            background: #007bff;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        }
+        .pulse {
+            width: 15px;
+            height: 15px;
+            background: rgba(0, 123, 255, 0.4);
+            border-radius: 50%;
+            position: absolute;
+            top: -3px; /* Центрирование относительно основного маркера */
+            left: -3px;
+            animation: pulse-animation 2s infinite;
+            z-index: -1;
+        }
+        @keyframes pulse-animation {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(4); opacity: 0; }
         }
 
-        /* Убираем лишнее */
         .leaflet-control-zoom { display: none !important; }
-        .leaflet-control-attribution { font-size: 9px !important; }
     </style>
 </head>
 <body>
@@ -62,50 +76,43 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
 <script>
-    // 1. Слои
     const dgis = L.tileLayer('https://tile{s}.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', { subdomains: '0123' });
     const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains: ['mt0','mt1','mt2','mt3'] });
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-
-    // 2. Карта
+    
     const map = L.map('map', {
         center: [52.287, 76.967], zoom: 14,
         layers: [dgis], zoomControl: false
     });
 
-    // 3. Переключатель (вверху справа)
-    const baseMaps = { "🗺️ Карта": dgis, "🛰️ Спутник": googleSat, "🏁 OSM": osm };
-    L.control.layers(baseMaps, null, { collapsed: true }).addTo(map);
+    const baseMaps = { 
+        "<span style='font-size:16px;'>🗺️ 2ГИС</span>": dgis, 
+        "<span style='font-size:16px;'>🛰️ Спутник</span>": googleSat 
+    };
+    L.control.layers(baseMaps, null, { collapsed: true, position: 'bottomright' }).addTo(map);
 
-    // 4. Твоя ссылка CSV (ОБЯЗАТЕЛЬНО ПОДСТАВЬ СВОЮ)
     const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
-
     let markersData = [];
-    function clean(text) {
-        return text ? text.toString().toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, '') : "";
-    }
 
-    // Загрузка
+    // Загрузка ТК
     Papa.parse(tableUrl, {
         download: true, header: true, skipEmptyLines: true,
         complete: function(results) {
             results.data.forEach(row => {
-                const name = row.name || row.Name || "";
                 const lat = parseFloat(row.lat || row.Lat);
                 const lng = parseFloat(row.lng || row.Lng);
                 if (!isNaN(lat) && !isNaN(lng)) {
-                    const m = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${name}</b><br>${row.description || ""}`);
-                    markersData.push({ cleanName: clean(name), realName: name, marker: m });
+                    const m = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${row.name || "ТК"}</b><br>${row.description || ""}`);
+                    markersData.push({ cleanName: (row.name || "").toString().toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, ''), realName: row.name, marker: m });
                 }
             });
         }
     });
 
-    // Поиск
+    // ПОИСК
     const input = document.getElementById('search');
     const resDiv = document.getElementById('results');
     input.addEventListener('input', () => {
-        const query = clean(input.value);
+        const query = input.value.toLowerCase().replace(/t/g, 'т').replace(/k/g, 'к').replace(/[^а-яё0-9]/g, '');
         resDiv.innerHTML = '';
         if (query.length < 1) { resDiv.style.display = 'none'; return; }
         const found = markersData.filter(x => x.cleanName.includes(query));
@@ -125,11 +132,22 @@
         } else { resDiv.style.display = 'none'; }
     });
 
-    // Моя позиция
-    map.locate({setView: false, watch: true});
+    // ГЕОЛОКАЦИЯ С АНИМАЦИЕЙ
+    const userIcon = L.divIcon({
+        className: 'user-location-wrapper',
+        html: '<div class="user-location-marker"><div class="pulse"></div></div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+    });
+
+    map.locate({setView: false, watch: true, enableHighAccuracy: true});
+    
     map.on('locationfound', (e) => {
-        if (window.userMarker) { window.userMarker.setLatLng(e.latlng); } 
-        else { window.userMarker = L.circleMarker(e.latlng, {radius: 6, color: '#007bff', fillColor: '#007bff', fillOpacity: 1}).addTo(map); }
+        if (window.userMarker) {
+            window.userMarker.setLatLng(e.latlng);
+        } else {
+            window.userMarker = L.marker(e.latlng, {icon: userIcon}).addTo(map);
+        }
     });
 </script>
 </body>
