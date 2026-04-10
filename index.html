@@ -1,17 +1,56 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта ТК Павлодар</title>
+    <title>Карта ТК ССР Павлодар</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100%; }
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
+        
+        /* Стиль панели поиска */
+        .search-container {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            width: 250px;
+        }
+        input#search-input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #results {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 5px;
+            display: none;
+            background: white;
+            border: 1px solid #eee;
+        }
+        .result-item {
+            padding: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .result-item:hover { background: #f0f0f0; }
     </style>
 </head>
 <body>
+
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Поиск ТК (напр. ТК-12)...">
+        <div id="results"></div>
+    </div>
 
     <div id="map"></div>
 
@@ -19,47 +58,76 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
     <script>
-        // Код инициализации будет здесь
-		// 1. Инициализация карты (центр на Павлодар)
-const map = L.map('map').setView([52.28, 76.96], 13);
+        const map = L.map('map').setView([52.28, 76.96], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// 2. Подключение слоя карты (OpenStreetMap)
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-}).addTo(map);
+        // ВАЖНО: Вставьте вашу ссылку между кавычками ниже
+        const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
 
-// 3. Ссылка на вашу опубликованную таблицу (вставьте свою из Шага 1)
-const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv';
+        let allMarkers = []; // Тут будем хранить данные для поиска
 
-// 4. Функция загрузки данных
-function loadMarkers() {
-    Papa.parse(tableUrl, {
-        download: true,
-        header: true,
-        complete: function(results) {
-            results.data.forEach(row => {
-                if (row.Lat && row.Lng) {
-                    // Создаем маркер для каждой ТК
-                    const marker = L.marker([row.Lat, row.Lng]).addTo(map);
-                    // Добавляем всплывающее окно
-                    marker.bindPopup(`<b>ТК: ${row.Name}</b><br>${row.Description}`);
+        function loadMarkers() {
+            Papa.parse(tableUrl, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    console.log("Данные загружены:", results.data); // Для отладки
+                    
+                    results.data.forEach(row => {
+                        // Проверяем, чтобы колонки назывались Name, Lat, Lng в таблице!
+                        if (row.Lat && row.Lng) {
+                            const marker = L.marker([parseFloat(row.Lat), parseFloat(row.Lng)]).addTo(map);
+                            const popupContent = `<b>ТК: ${row.Name}</b><br>${row.Description || ''}`;
+                            marker.bindPopup(popupContent);
+                            
+                            // Сохраняем в список для поиска
+                            allMarkers.push({
+                                name: row.Name.toString().toLowerCase(),
+                                marker: marker,
+                                data: row
+                            });
+                        }
+                    });
                 }
             });
         }
-    });
-}
 
-loadMarkers();
+        // Логика поиска
+        const searchInput = document.getElementById('search-input');
+        const resultsContainer = document.getElementById('results');
 
-map.locate({setView: true, maxZoom: 16});
+        searchInput.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            resultsContainer.innerHTML = '';
+            
+            if (val.length < 1) {
+                resultsContainer.style.display = 'none';
+                return;
+            }
 
-function onLocationFound(e) {
-    const radius = e.accuracy / 2;
-    L.marker(e.latlng).addTo(map).bindPopup("Вы здесь").openPopup();
-    L.circle(e.latlng, radius).addTo(map);
-}
+            const filtered = allMarkers.filter(m => m.name.includes(val));
+            
+            if (filtered.length > 0) {
+                resultsContainer.style.display = 'block';
+                filtered.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    div.innerText = `ТК: ${item.data.Name}`;
+                    div.onclick = () => {
+                        map.setView(item.marker.getLatLng(), 17);
+                        item.marker.openPopup();
+                        resultsContainer.style.display = 'none';
+                        searchInput.value = item.data.Name;
+                    };
+                    resultsContainer.appendChild(div);
+                });
+            } else {
+                resultsContainer.style.display = 'none';
+            }
+        });
 
-map.on('locationfound', onLocationFound);
+        loadMarkers();
     </script>
 </body>
 </html>
