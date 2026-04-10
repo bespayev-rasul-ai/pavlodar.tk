@@ -1,0 +1,65 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта ТК Павлодар</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+
+    <script>
+        // Код инициализации будет здесь
+		// 1. Инициализация карты (центр на Павлодар)
+const map = L.map('map').setView([52.28, 76.96], 13);
+
+// 2. Подключение слоя карты (OpenStreetMap)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// 3. Ссылка на вашу опубликованную таблицу (вставьте свою из Шага 1)
+const tableUrl = https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv;
+
+// 4. Функция загрузки данных
+function loadMarkers() {
+    Papa.parse(tableUrl, {
+        download: true,
+        header: true,
+        complete: function(results) {
+            results.data.forEach(row => {
+                if (row.Lat && row.Lng) {
+                    // Создаем маркер для каждой ТК
+                    const marker = L.marker([row.Lat, row.Lng]).addTo(map);
+                    // Добавляем всплывающее окно
+                    marker.bindPopup(`<b>ТК: ${row.Name}</b><br>${row.Description}`);
+                }
+            });
+        }
+    });
+}
+
+loadMarkers();
+
+map.locate({setView: true, maxZoom: 16});
+
+function onLocationFound(e) {
+    const radius = e.accuracy / 2;
+    L.marker(e.latlng).addTo(map).bindPopup("Вы здесь").openPopup();
+    L.circle(e.latlng, radius).addTo(map);
+}
+
+map.on('locationfound', onLocationFound);
+    </script>
+</body>
+</html>
