@@ -41,7 +41,7 @@
 <script>
 // Инициализация карты (Павлодар)
 //const map = L.map('map').setView([52.287, 76.967], 14);
-// L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+// L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').dgLayer.addTo(map);
 
     const dgLayer = L.tileLayer('https://tile2.maps.2gis.com/tiles?z={z}&x={x}&y={y}&v=1', {
     attribution: '© 2GIS',
@@ -49,7 +49,7 @@
 });
 
 // Чтобы сделать её основной, замените .addTo(map) у старого слоя на этот
-dgLayer.addTo(map);
+//dgLayer.addTo(map);
 
     // ВАЖНО: Ссылка обязательно в кавычках!
     const tableUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnWaUNZ-F1bZZ3CdDQ5Ejushcn2RlsJ2aYVO6gu1j6FVD1Ha1kYWcSqp1TPdldtvRPmd114CkgjXBC/pub?output=csv'; 
